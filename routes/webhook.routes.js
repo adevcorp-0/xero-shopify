@@ -5,4 +5,5 @@ const { getHome, receiveWebhook } = require('../controllers/webhook.controller')
 router.get('/', getHome);
 router.post('/inventory', receiveWebhook);
 
+
 module.exports = router;
