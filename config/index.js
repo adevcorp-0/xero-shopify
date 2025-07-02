@@ -1,0 +1,10 @@
+module.exports = {
+    SHOPIFY_STORE_DOMAIN: process.env.SHOPIFY_STORE_DOMAIN,
+    SHOPIFY_ACCESS_TOKEN: process.env.SHOPIFY_ACCESS_TOKEN,
+    SHOPIFY_API_SECRET: process.env.SHOPIFY_API_SECRET,
+    SHOPIFY_APP_SERVER: process.env.SHOPIFY_APP_SERVER,
+
+    XERO_CLIENT_ID: process.env.XERO_CLIENT_ID,
+    XERO_CLIENT_SECRET: process.env.XERO_CLIENT_SECRET,
+    XERO_REDIRECT_URI: `${process.env.SHOPIFY_APP_SERVER}/xero/callback`,
+};
