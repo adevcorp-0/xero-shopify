@@ -1,9 +1,17 @@
 const { verifyHmac } = require('../utils/hmac.util');
 const { getValidAccessToken } = require('../services/xeroToken.service');
 const shopifySyncService = require('../services/shopify.service');
+const crypto = require('crypto');
 
 let inventoryLogs = [];
 
+const getWebhookHash = (payload) => {
+    return crypto.createHash('md5').update(
+        `${payload.inventory_item_id}-${payload.updated_at}`
+    ).digest('hex');
+};
+
+const processedEvents = new Set();
 exports.getHome = (req, res) => {
     let html = `<h1>🔗 Connect to Xero</h1>
     <a href="/xero/redirect"><button>Connect to Xero</button></a>
@@ -23,6 +31,7 @@ exports.getHome = (req, res) => {
 };
 
 exports.receiveWebhook = async (req, res) => {
+
     const topic = req.get('X-Shopify-Topic');
     const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
     const isVerified = verifyHmac(req.body, hmacHeader);
@@ -30,6 +39,14 @@ exports.receiveWebhook = async (req, res) => {
     const payload = JSON.parse(req.body.toString('utf8'));
     console.log("topic: ", topic)
     console.log("payload: ", payload)
+    const hash = getWebhookHash(payload);
+    if (processedEvents.has(hash)) {
+        console.log('⚠️ Duplicate webhook received, skipping...');
+        return;
+    }
+    processedEvents.add(hash);
+    setTimeout(() => processedEvents.delete(hash), 10 * 60 * 1000);
+
     try {
         switch (topic) {
             case 'inventory_levels/update':

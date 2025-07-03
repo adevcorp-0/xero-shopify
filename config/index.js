@@ -7,4 +7,5 @@ module.exports = {
     XERO_CLIENT_ID: process.env.XERO_CLIENT_ID,
     XERO_CLIENT_SECRET: process.env.XERO_CLIENT_SECRET,
     XERO_REDIRECT_URI: `${process.env.SHOPIFY_APP_SERVER}/xero/callback`,
+    XERO_TENANT_ID: process.env.XERO_TENANT_ID,
 };
