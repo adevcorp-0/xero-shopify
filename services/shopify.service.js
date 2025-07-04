@@ -16,18 +16,14 @@ const XERO_SKU_PREFIX = 'STX';
 exports.ensureWebhookRegistered = async () => {
     const topic = "inventory_levels/update";
     const address = `${SHOPIFY_APP_SERVER}/webhook/inventory`;
-
     try {
         const existing = await axios.get(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`, {
             headers: SHOPIFY_HEADERS
         });
-
         const alreadyExists = existing.data.webhooks.some(
             (w) => w.address === address && w.topic === topic
         );
-
         if (alreadyExists) return console.log("✅ Webhook already registered.");
-
         const res = await axios.post(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`, {
             webhook: { topic, address, format: "json" }
         }, {
@@ -217,15 +213,18 @@ async function getAllShopifyVariants() {
 
         since_id = products[products.length - 1].id;
     }
-    return allVariants;
+    // return allVariants;
+    return allVariants[0];
 }
 
 
 exports.bulkSyncVariantsToXero = async function () {
     try {
+        // const variants = await getAllShopifyVariants();
+        let tmpVariants = [];
         const variants = await getAllShopifyVariants();
-
-        for (const variant of variants) {
+        tmpVariants.push(variants);
+        for (const variant of tmpVariants) {
             try {
                 const inventory_item_id = variant.inventory_item_id;
                 const available = variant.inventory_quantity || 0;

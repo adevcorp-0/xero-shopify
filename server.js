@@ -26,12 +26,12 @@ mongoose.connect(process.env.MONGO_URI, {
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   await ensureWebhookRegistered();
-  try {
-    console.log("📦 Starting bulk variant sync to Xero...");
-    await bulkSyncVariantsToXero();
-    console.log("✅ Bulk variant sync completed.");
-  } catch (err) {
-    console.error("❌ Failed to sync variants on startup:", err);
-  }
+  // try {
+  //   console.log("📦 Starting bulk variant sync to Xero...");
+  //   await bulkSyncVariantsToXero();
+  //   console.log("✅ Bulk variant sync completed.");
+  // } catch (err) {
+  //   console.error("❌ Failed to sync variants on startup:", err);
+  // }
 
 });

@@ -2,18 +2,26 @@ const axios = require('axios');
 const { getValidAccessToken } = require('./xeroToken.service');
 const BASE_URL = "https://api.xero.com/api.xro/2.0"
 async function getXeroItemBySKU(code) {
-    const { accessToken, tenantId } = await getValidAccessToken();
-    const res = await axios.get(`${BASE_URL}/Items`, {
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Xero-tenant-id': tenantId
-        },
-        params: {
-            where: `Code=="${code}"`
-        }
-    });
+    try {
+        const { accessToken, tenantId } = await getValidAccessToken();
+        console.log("accessToken: ", accessToken)
+        console.log("Tenant ID: ", tenantId)
+        const res = await axios.get(`${BASE_URL}/Items`, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Xero-tenant-id': tenantId
+            },
+            params: {
+                where: `Code=="${code}"`
+            }
+        });
 
-    return res.data.Items?.[0] || null;
+        return res.data.Items?.[0] || null;
+    } catch (error) {
+        console.error('❌ Error fetching item from Xero:', error.response?.data || error.message);
+        throw error;
+    }
+
 }
 
 async function updateXeroInventory(itemId, newQuantity) {
