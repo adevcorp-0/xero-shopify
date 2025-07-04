@@ -7,10 +7,12 @@ const mongoose = require('mongoose');
 const webhookRoutes = require('./routes/webhook.routes');
 const xeroRoutes = require('./routes/xero.routes');
 const { bulkSyncVariantsToXero } = require('./services/shopify.service');
+const { getHome } = require('./controllers/webhook.controller');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use('/', getHome);
 app.use('/webhook', bodyParser.raw({ type: 'application/json' }));
 
 app.use('/webhook', webhookRoutes);
