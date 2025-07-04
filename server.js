@@ -16,8 +16,9 @@ app.use('/webhook', bodyParser.raw({ type: 'application/json' }));
 app.use('/webhook', webhookRoutes);
 app.use('/xero', xeroRoutes);
 
-console.log("Mongo url ========= : ", process.env.MONGO_CUSTOM_URI);
-mongoose.connect(process.env.MONGO_CUSTOM_URI, {
+const MongoURI = "mongodb://mongo:pFbSsotNzxPyKQEteWgvOSBQejYwmOxe@centerbeam.proxy.rlwy.net:43486/shopify_xero_sync?authSource=admin";
+console.log("Mongo url ========= : ", MongoURI);
+mongoose.connect(MongoURI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
