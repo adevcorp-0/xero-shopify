@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
-const { ensureWebhookRegistered } = require('./services/shopify.service');
+const { ensureWebhookRegistered, clearAllWebhooks } = require('./services/shopify.service');
 const mongoose = require('mongoose');
 
 const webhookRoutes = require('./routes/webhook.routes');
@@ -12,11 +12,10 @@ const { getHome } = require('./controllers/webhook.controller');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use('/', getHome);
 app.use('/webhook', bodyParser.raw({ type: 'application/json' }));
-
 app.use('/webhook', webhookRoutes);
 app.use('/xero', xeroRoutes);
+app.get('/', getHome);
 
 const MongoURI = "mongodb://mongo:pFbSsotNzxPyKQEteWgvOSBQejYwmOxe@centerbeam.proxy.rlwy.net:43486/shopify_xero_sync?authSource=admin";
 console.log("Mongo url ========= : ", MongoURI);
@@ -30,6 +29,7 @@ mongoose.connect(MongoURI, {
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   await ensureWebhookRegistered();
+  // await clearAllWebhooks();
   // try {
   //   console.log("📦 Starting bulk variant sync to Xero...");
   //   await bulkSyncVariantsToXero();

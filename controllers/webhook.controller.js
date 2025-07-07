@@ -55,6 +55,8 @@ exports.receiveWebhook = async (req, res) => {
                 break;
 
             case 'orders/create':
+                await shopifySyncService.syncOrderToXero(payload);
+                break;
             case 'orders/cancelled':
             case 'orders/updated':
             case 'refunds/create':

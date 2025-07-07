@@ -14,25 +14,64 @@ const XERO_SKU_PREFIX = 'STX';
 
 
 exports.ensureWebhookRegistered = async () => {
-    const topic = "inventory_levels/update";
-    const address = `${SHOPIFY_APP_SERVER}/webhook/inventory`;
+    const topics = [
+        { topic: "inventory_levels/update", path: "/webhook/inventory" },
+        { topic: "orders/create", path: "/webhook/inventory/orders" },
+        // Add more as needed (orders/updated, orders/cancelled, etc.)
+    ];
     try {
-        const existing = await axios.get(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`, {
-            headers: SHOPIFY_HEADERS
-        });
-        const alreadyExists = existing.data.webhooks.some(
-            (w) => w.address === address && w.topic === topic
+        const existingRes = await axios.get(
+            `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`,
+            { headers: SHOPIFY_HEADERS }
         );
-        if (alreadyExists) return console.log("✅ Webhook already registered.");
-        const res = await axios.post(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`, {
-            webhook: { topic, address, format: "json" }
-        }, {
-            headers: SHOPIFY_HEADERS
-        });
-
-        console.log("✅ Webhook registered:", res.data);
+        const existing = existingRes.data.webhooks || [];
+        for (const { topic, path } of topics) {
+            const address = `${SHOPIFY_APP_SERVER}${path}`;
+            const alreadyExists = existing.some(
+                (w) => w.address === address && w.topic === topic
+            );
+            if (alreadyExists) {
+                console.log(`✅ Webhook already registered: ${topic}`);
+                continue;
+            }
+            const res = await axios.post(
+                `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`,
+                {
+                    webhook: {
+                        topic,
+                        address,
+                        format: "json"
+                    }
+                },
+                { headers: SHOPIFY_HEADERS }
+            );
+            console.log(`✅ Registered webhook for: ${topic}`, res.data?.webhook?.id || '');
+        }
     } catch (error) {
-        console.error("❌ Shopify webhook error:", error.response?.data || error.message);
+        console.error("❌ Error registering webhooks:", error.response?.data || error.message);
+    }
+};
+
+exports.clearAllWebhooks = async () => {
+    try {
+        const res = await axios.get(
+            `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`,
+            { headers: SHOPIFY_HEADERS }
+        );
+
+        const webhooks = res.data.webhooks || [];
+
+        for (const webhook of webhooks) {
+            await axios.delete(
+                `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks/${webhook.id}.json`,
+                { headers: SHOPIFY_HEADERS }
+            );
+            console.log(`🗑️ Deleted webhook: ${webhook.topic} → ${webhook.address}`);
+        }
+
+        console.log("✅ All webhooks deleted.");
+    } catch (error) {
+        console.error("❌ Error deleting webhooks:", error.response?.data || error.message);
     }
 };
 
@@ -98,6 +137,53 @@ exports.syncInventoryFromShopify = async (payload) => {
         console.error('❌ Error syncing inventory to Xero:', error.message || error);
     }
 };
+
+exports.syncOrderToXero = async (orderPayload) => {
+    try {
+        const { id, line_items, customer } = orderPayload;
+        if (!line_items || line_items.length === 0) {
+            console.warn('⚠️ No line items found in order:', id);
+            return;
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        const { accessToken, tenantId } = await getValidAccessToken();
+        const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
+
+        const lineItems = line_items.map(item => ({
+            Description: item.title,
+            Quantity: item.quantity,
+            UnitAmount: parseFloat(item.price),
+            ItemCode: `${XERO_SKU_PREFIX}-${item.sku}`,
+            AccountCode: '4000', // Sales account
+        }));
+
+        const payload = {
+            Type: 'ACCREC',
+            Contact: { Name: contactName },
+            Date: today,
+            DueDate: dueDate,
+            LineItems: lineItems,
+            Reference: orderPayload.name,
+            Status: 'AUTHORISED',
+        };
+
+        const response = await axios.post(`${BASE_URL}/Invoices`, { Invoices: [payload] }, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Xero-tenant-id': tenantId,
+                Accept: 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log(`🧾 Created Xero invoice for order ${id}:`, response.data.Invoices?.[0]?.InvoiceID);
+    } catch (error) {
+        console.error('❌ Error syncing order to Xero:', error.message || error);
+    }
+}
 
 async function getVariantByInventoryItemId(inventoryItemId) {
     const query = `
@@ -213,8 +299,8 @@ async function getAllShopifyVariants() {
 
         since_id = products[products.length - 1].id;
     }
-    // return allVariants;
-    return allVariants[0];
+    return allVariants;
+    // return allVariants[0];
 }
 
 
@@ -223,8 +309,8 @@ exports.bulkSyncVariantsToXero = async function () {
         // const variants = await getAllShopifyVariants();
         let tmpVariants = [];
         const variants = await getAllShopifyVariants();
-        tmpVariants.push(variants);
-        for (const variant of tmpVariants) {
+        // tmpVariants.push(variants);
+        for (const variant of variants) {
             try {
                 const inventory_item_id = variant.inventory_item_id;
                 const available = variant.inventory_quantity || 0;
@@ -282,15 +368,15 @@ exports.bulkSyncVariantsToXero = async function () {
                 console.log('📦 Creating item in Xero:', uniqueCode);
                 const createdItem = await createXeroItem(productData);
                 console.log('🆕 Created:', createdItem?.Code);
-                if (available > 0) {
-                    const bill = await createXeroBillForItem({
-                        code: uniqueCode,
-                        quantity: available,
-                        unitCost: purchaseCost,
-                        description: purchaseDescription,
-                    });
-                    console.log(`🧾 Created bill for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
-                }
+                // if (available > 0) {
+                //     const bill = await createXeroBillForItem({
+                //         code: uniqueCode,
+                //         quantity: available,
+                //         unitCost: purchaseCost,
+                //         description: purchaseDescription,
+                //     });
+                //     console.log(`🧾 Created bill for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
+                // }
 
 
             } catch (innerErr) {
