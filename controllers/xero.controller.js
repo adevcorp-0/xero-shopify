@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { getValidAccessToken } = require('../services/xeroToken.service');
+const { getValidAccessToken, saveInitialToken } = require('../services/xeroToken.service');
 const { XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI } = require('../config');
 const axios = require('axios');
 
