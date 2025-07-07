@@ -6,7 +6,7 @@ const axios = require('axios');
 exports.redirectToXero = (req, res) => {
     console.log("Thsi is")
     const state = crypto.randomBytes(8).toString('hex');
-    const url = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${XERO_CLIENT_ID}&redirect_uri=${encodeURIComponent(XERO_REDIRECT_URI)}&scope=openid profile email accounting.settings accounting.contacts accounting.transactions offline_access&state=${state}`;
+    const url = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${XERO_CLIENT_ID}&redirect_uri=${encodeURIComponent(XERO_REDIRECT_URI)}&scope=openid profile email accounting.settings accounting.contacts accounting.transactions offline_access&state=${state}&prompt=consent`;
     res.redirect(url);
 };
 
