@@ -3,7 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { ensureWebhookRegistered, clearAllWebhooks } = require('./services/shopify.service');
 const mongoose = require('mongoose');
-
+const { createABill } = require('./services/xero.service');
 const webhookRoutes = require('./routes/webhook.routes');
 const xeroRoutes = require('./routes/xero.routes');
 const { bulkSyncVariantsToXero } = require('./services/shopify.service');
@@ -29,6 +29,7 @@ mongoose.connect(MongoURI, {
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   await ensureWebhookRegistered();
+  // await createABill();
   // await clearAllWebhooks();
   // try {
   //   console.log("📦 Starting bulk variant sync to Xero...");

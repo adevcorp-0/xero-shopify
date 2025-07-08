@@ -4,8 +4,6 @@ const BASE_URL = "https://api.xero.com/api.xro/2.0"
 async function getXeroItemBySKU(code) {
     try {
         const { accessToken, tenantId } = await getValidAccessToken();
-        console.log("accessToken: ", accessToken)
-        console.log("Tenant ID: ", tenantId)
         const res = await axios.get(`${BASE_URL}/Items`, {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -77,8 +75,56 @@ async function createXeroItem(itemData) {
     }
 };
 
+async function createABill() {
+    const payload = {
+        Type: 'ACCPAY',
+        Contact: {
+            Name: 'Sasa Milojevic',
+            EmailAddress: 'w.mkl.corp@gmail.com'
+        },
+        Date: '2025-07-07',
+        DueDate: '2025-08-06',
+        LineItems: [
+            {
+                Description: 'Stock for T-Shirts',
+                Quantity: 10,
+                UnitAmount: 10,
+                ItemCode: 'STX-TSHIRT-SM',
+                AccountCode: '5000' // Must be a valid "Direct Costs"/"Purchases" account
+            }
+        ],
+        Reference: 'Restock Order #1001',
+        Status: 'AUTHORISED'
+    }
+    // console.log(payload);
+    // return;
+    try {
+        const { accessToken, tenantId } = await getValidAccessToken();
+        const response = await axios.post(
+            'https://api.xero.com/api.xro/2.0/Invoices',
+            { Invoices: [payload] },
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Xero-tenant-id': tenantId,
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        console.log("✅ Bill created successfully:", response.data);
+        return response.data;
+    } catch (error) {
+        console.error("❌ Failed to create bill:", error.response?.data || error.message);
+        throw error;
+    }
+
+}
+
 module.exports = {
     getXeroItemBySKU,
     updateXeroInventory,
-    createXeroItem
+    createXeroItem,
+    createABill
 };

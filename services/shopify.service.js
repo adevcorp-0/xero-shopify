@@ -10,7 +10,7 @@ const SHOPIFY_HEADERS = {
     "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
     "Content-Type": "application/json"
 };
-const XERO_SKU_PREFIX = 'STX';
+const XERO_SKU_PREFIX = 'STOX';
 
 
 exports.ensureWebhookRegistered = async () => {
@@ -170,6 +170,9 @@ exports.syncOrderToXero = async (orderPayload) => {
             Status: 'AUTHORISED',
         };
 
+        console.log('📦 Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
+        // return;
+
         const response = await axios.post(`${BASE_URL}/Invoices`, { Invoices: [payload] }, {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -181,7 +184,11 @@ exports.syncOrderToXero = async (orderPayload) => {
 
         console.log(`🧾 Created Xero invoice for order ${id}:`, response.data.Invoices?.[0]?.InvoiceID);
     } catch (error) {
-        console.error('❌ Error syncing order to Xero:', error.message || error);
+        if (error.response?.data) {
+            console.error("❌ Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
+        } else {
+            console.error("❌ Unknown Error:", error.message);
+        }
     }
 }
 
@@ -285,22 +292,25 @@ function extractIdFromGid(gid) {
 async function getAllShopifyVariants() {
     let since_id = null;
     let allVariants = [];
+    let seenProductIds = new Set();
 
     while (true) {
         const params = { limit: 250 };
         if (since_id) params.since_id = since_id;
-
         const products = await shopifyClient.product.list(params);
         if (products.length === 0) break;
-
+        const lastId = products[products.length - 1].id;
+        if (seenProductIds.has(lastId)) {
+            console.warn("🛑 Detected potential infinite loop at product ID:", lastId);
+            break;
+        }
         for (const product of products) {
+            seenProductIds.add(product.id);
             allVariants.push(...product.variants);
         }
-
-        since_id = products[products.length - 1].id;
+        since_id = lastId;
     }
     return allVariants;
-    // return allVariants[0];
 }
 
 
@@ -309,9 +319,12 @@ exports.bulkSyncVariantsToXero = async function () {
         // const variants = await getAllShopifyVariants();
         let tmpVariants = [];
         const variants = await getAllShopifyVariants();
+        let tmp = 1;
         // tmpVariants.push(variants);
         for (const variant of variants) {
             try {
+                console.log("====", tmp, "======");
+                tmp++;
                 const inventory_item_id = variant.inventory_item_id;
                 const available = variant.inventory_quantity || 0;
 
@@ -325,7 +338,8 @@ exports.bulkSyncVariantsToXero = async function () {
                 }
 
                 const uniqueCode = `${XERO_SKU_PREFIX}-${sku}`;
-                const name = product?.title || variant.title || 'Unnamed';
+                // const name = product?.title || variant.title || 'Unnamed';
+                const name = product?.title + ' ' + variant.title || 'Unnamed';
                 const description = product?.body_html || 'Imported from Shopify';
                 const cleanDescription = striptags(description).slice(0, 4000);
                 const salesPrice = parseFloat(variant.price) || 0;
@@ -338,9 +352,8 @@ exports.bulkSyncVariantsToXero = async function () {
 
                 if (xeroItem) {
                     console.log(`✅ Already exists in Xero: ${uniqueCode}`);
-                    continue;
+                    // continue;
                 }
-
                 const productData = {
                     Code: uniqueCode,
                     Name: name,
@@ -348,14 +361,12 @@ exports.bulkSyncVariantsToXero = async function () {
                     QuantityOnHand: Number(available),
                     IsTrackedAsInventory: true,
                     InventoryAssetAccountCode: '1400',
-
                     PurchaseDescription: purchaseDescription,
                     PurchaseDetails: {
                         UnitPrice: purchaseCost,
                         COGSAccountCode: '5000',
                         TaxType: 'NONE',
                     },
-
                     SalesDetails: {
                         UnitPrice: salesPrice,
                         AccountCode: '4000',
@@ -364,19 +375,20 @@ exports.bulkSyncVariantsToXero = async function () {
                     IsSold: true,
                     IsPurchased: true,
                 };
-
+                let reference = `Shopify Bulk Sync to Xero - ${name}`
                 console.log('📦 Creating item in Xero:', uniqueCode);
                 const createdItem = await createXeroItem(productData);
                 console.log('🆕 Created:', createdItem?.Code);
-                // if (available > 0) {
-                //     const bill = await createXeroBillForItem({
-                //         code: uniqueCode,
-                //         quantity: available,
-                //         unitCost: purchaseCost,
-                //         description: purchaseDescription,
-                //     });
-                //     console.log(`🧾 Created bill for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
-                // }
+                if (available > 0) {
+                    const bill = await createXeroBillForItem({
+                        code: uniqueCode,
+                        quantity: available,
+                        unitCost: purchaseCost,
+                        description: purchaseDescription,
+                        reference: reference
+                    });
+                    console.log(`🧾 Created bill for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
+                }
 
 
             } catch (innerErr) {
@@ -389,24 +401,23 @@ exports.bulkSyncVariantsToXero = async function () {
 
 }
 
-async function createXeroBillForItem({ code, quantity, unitCost, description }) {
+async function createXeroBillForItem({ code, quantity, unitCost, description, reference }) {
     try {
         const today = new Date().toISOString().split('T')[0];
         const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const { accessToken, tenantId } = await getValidAccessToken();
-        console.log("Access TToken :", accessToken)
-        console.log("Tenant :", tenantId)
         const payload = {
             Type: 'ACCPAY',
             Contact: { Name: 'Shopify Bulk Sync' },
             Date: today,
             DueDate: dueDate,
+            Reference: reference,
             LineItems: [{
                 Description: description,
                 Quantity: quantity,
                 UnitAmount: unitCost,
                 ItemCode: code,
-                AccountCode: '1400',  // Inventory Asset account for increasing stock
+                AccountCode: '1400',
             }],
             Status: 'AUTHORISED',
         };

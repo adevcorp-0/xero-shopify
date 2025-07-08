@@ -38,7 +38,7 @@ exports.receiveWebhook = async (req, res) => {
     if (!isVerified) return res.status(401).send('Unauthorized');
     const payload = JSON.parse(req.body.toString('utf8'));
     console.log("topic: ", topic)
-    console.log("payload: ", payload)
+    // console.log("payload: ", payload)
     const hash = getWebhookHash(payload);
     if (processedEvents.has(hash)) {
         console.log('⚠️ Duplicate webhook received, skipping...');
