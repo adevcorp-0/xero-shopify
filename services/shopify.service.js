@@ -282,11 +282,9 @@ async function getVariantCostByGraphQL(productId, inventoryItemId) {
     }
 }
 
-
 function extractIdFromGid(gid) {
     return gid.split('/').pop();
 }
-
 
 // Bulk Synchronization
 async function getAllShopifyVariants() {
