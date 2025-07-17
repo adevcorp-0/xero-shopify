@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { getValidAccessToken } = require('./xeroToken.service');
+const { saveItemBill, getBillsForItem, removeBill } = require('../services/xeroItemBill.service');
 const BASE_URL = "https://api.xero.com/api.xro/2.0"
 async function getXeroItemBySKU(code) {
     try {
@@ -90,14 +91,12 @@ async function createABill() {
                 Quantity: 10,
                 UnitAmount: 10,
                 ItemCode: 'STX-TSHIRT-SM',
-                AccountCode: '5000' // Must be a valid "Direct Costs"/"Purchases" account
+                AccountCode: '5000'
             }
         ],
         Reference: 'Restock Order #1001',
         Status: 'AUTHORISED'
     }
-    // console.log(payload);
-    // return;
     try {
         const { accessToken, tenantId } = await getValidAccessToken();
         const response = await axios.post(
@@ -112,7 +111,6 @@ async function createABill() {
                 }
             }
         );
-
         console.log("✅ Bill created successfully:", response.data);
         return response.data;
     } catch (error) {
@@ -122,9 +120,179 @@ async function createABill() {
 
 }
 
+async function getXeroItemQuantity(itemId) {
+    const { accessToken, tenantId } = await getValidAccessToken();
+    const res = await axios.get(`${BASE_URL}/Items/${itemId}`, {
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Xero-tenant-id': tenantId,
+            Accept: 'application/json'
+        }
+    });
+    return res.data?.Items?.[0]?.QuantityOnHand ?? 0;
+};
+
+
+async function createInventoryBill({ sku, quantity, unitCost }) {
+    const { accessToken, tenantId } = await getValidAccessToken();
+    const billPayload = {
+        Type: "ACCPAY",
+        Contact: { Name: "Shopify Supplier" },
+        Date: new Date().toISOString().split('T')[0],
+        LineItems: [
+            {
+                Description: `Inventory sync from Shopify for ${sku}`,
+                Quantity: quantity,
+                UnitAmount: unitCost,
+                AccountCode: "5000",
+                ItemCode: sku
+            }
+        ],
+        Status: "AUTHORISED"
+    };
+
+    await axios.post(`${BASE_URL}/Invoices`, { Invoices: [billPayload] }, {
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Xero-tenant-id': tenantId,
+            Accept: 'application/json',
+            'Content-Type': 'application/json'
+        }
+    });
+};
+
+async function archiveBillsForItem(itemCode) {
+    const { accessToken, tenantId } = await getValidAccessToken();
+    const bills = await getBillsForItem(itemCode);
+
+    for (const bill of bills) {
+        try {
+            await axios.post(`${BASE_URL}/Invoices/${bill.invoiceId}`, {
+                Invoices: [{ InvoiceID: bill.invoiceId, Status: "VOIDED" }]
+            }, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Xero-tenant-id': tenantId,
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            console.log(`✅ Voided bill ${bill.invoiceId} for item ${itemCode}`);
+            await removeBill(bill.invoiceId); // Clean up mapping
+        } catch (error) {
+            console.error(`❌ Failed to void bill ${bill.invoiceId}:`, error.response?.data || error.message);
+        }
+    }
+
+}
+
+
+
+const getXeroInvoiceByReference = async (reference) => {
+    const { accessToken, tenantId } = await getValidAccessToken();
+    const whereClause = `Reference == "${reference}"`;
+    const encodedWhere = encodeURIComponent(whereClause);
+
+    const response = await axios.get(`${BASE_URL}/Invoices?where=${encodedWhere}`, {
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Xero-tenant-id': tenantId,
+            Accept: 'application/json',
+        },
+    });
+
+    const invoices = response.data.Invoices || [];
+    return invoices.length > 0 ? invoices[0] : null;
+
+}
+
+const createInvoice = async (invoicePayload) => {
+    const { accessToken, tenantId } = await getValidAccessToken();
+    const response = await axios.post(`${BASE_URL}/Invoices`, { Invoices: [invoicePayload] }, {
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Xero-tenant-id': tenantId,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        }
+    });
+
+    return response.data.Invoices?.[0];
+
+}
+
+const updateInvoice = async (invoiceId) => {
+    const { accessToken, tenantId } = await getValidAccessToken();
+    const updateRes = await axios.put(`${BASE_URL}/Invoices/${invoiceId}`, { Invoices: [{ InvoiceID: invoiceId, Status: 'VOIDED' }] },
+        {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Xero-tenant-id': tenantId,
+                Accept: 'application/json',
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+    return updateRes;
+}
+
+const checkContact = async (contactId) => {
+    try {
+        const { accessToken, tenantId } = await getValidAccessToken();
+
+        const response = await axios.get(
+            `${BASE_URL}/Contacts/${contactId}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Xero-tenant-id': tenantId,
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+
+        return !!response?.data?.Contacts?.length;
+    } catch (error) {
+        // Contact not found or other error
+        return false;
+    }
+};
+
+const xeroRefundCreate = async (creditNotePayload) => {
+    try {
+        const { accessToken, tenantId } = await getValidAccessToken();
+        const response = await axios.post(
+            `${BASE_URL}/CreditNotes`,
+            { CreditNotes: [creditNotePayload] },
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Xero-tenant-id': tenantId,
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        console.log(`💸 Created credit note for refund on order ${orderName}`);
+        return response.data;
+    } catch (err) {
+        console.log("❌ Error creating refund in Xero: ", err.response?.data || err.message);
+    }
+}
+
 module.exports = {
     getXeroItemBySKU,
     updateXeroInventory,
     createXeroItem,
-    createABill
+    createABill,
+    getXeroInvoiceByReference,
+    createInvoice,
+    updateInvoice,
+    checkContact,
+    xeroRefundCreate,
+    getXeroItemQuantity,
+    createInventoryBill,
+    archiveBillsForItem
 };

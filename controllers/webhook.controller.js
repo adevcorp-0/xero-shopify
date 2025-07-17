@@ -41,8 +41,7 @@ exports.receiveWebhook = async (req, res) => {
     // console.log("payload: ", payload)
     const hash = getWebhookHash(payload);
     if (processedEvents.has(hash)) {
-        console.log('⚠️ Duplicate webhook received, skipping...');
-        return;
+        return res.status(200).send('⚠️ Duplicate webhook received, skipping...');
     }
     processedEvents.add(hash);
     setTimeout(() => processedEvents.delete(hash), 10 * 60 * 1000);
@@ -53,18 +52,24 @@ exports.receiveWebhook = async (req, res) => {
                 console.log(payload)
                 await shopifySyncService.syncInventoryFromShopify(payload);
                 break;
-
-            case 'orders/create':
+            // case 'orders/create':
+            //     await shopifySyncService.syncOrderToXero(payload);
+            //     break;
+            case 'orders/paid':
                 await shopifySyncService.syncOrderToXero(payload);
                 break;
             case 'orders/cancelled':
-            case 'orders/updated':
-            case 'refunds/create':
-            case 'products/update':
-            case 'inventory_transfers/create':
-                // Optional: just log or store for auditing
-                console.log(`📦 Received ${topic}`, payload);
+                await shopifySyncService.syncOrderCancelled(payload);
                 break;
+            case 'orders/updated':
+                break;
+            case 'refunds/create':
+                break;
+            // case 'products/update':
+            // case 'inventory_transfers/create':
+            //     // Optional: just log or store for auditing
+            //     console.log(`📦 Received ${topic}`, payload);
+            //     break;
 
             default:
                 console.log(`⚠️ Unhandled webhook topic: ${topic}`);
@@ -76,5 +81,3 @@ exports.receiveWebhook = async (req, res) => {
         res.status(500).send('Error');
     }
 };
-
-
