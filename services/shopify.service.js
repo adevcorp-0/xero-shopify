@@ -211,7 +211,6 @@ exports.syncOrderToXero = async (orderPayload) => {
         const today = new Date().toISOString().split('T')[0];
         const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
-        console.log("THis is line items: ", line_items)
         const lineItems = line_items.map(item => {
             console.log("This is line item", item)
             const price = parseFloat(item.price || '0');
@@ -235,17 +234,17 @@ exports.syncOrderToXero = async (orderPayload) => {
             }
         });
 
-        if (shipping_lines && shipping_lines.length > 0) {
-            for (const shipping of shipping_lines) {
-                lineItems.push({
-                    Description: shipping.title || 'Shipping',
-                    Quantity: 1,
-                    UnitAmount: parseFloat(shipping.price),
-                    AccountCode: '6160', // Or use your Shipping Income account code, e.g., '4200'
-                    TaxType: 'NONE' // Or 'OUTPUT' if shipping is taxable
-                });
-            }
-        }
+        // if (shipping_lines && shipping_lines.length > 0) {
+        //     for (const shipping of shipping_lines) {
+        //         lineItems.push({
+        //             Description: shipping.title || 'Shipping',
+        //             Quantity: 1,
+        //             UnitAmount: parseFloat(shipping.price),
+        //             AccountCode: '6160', // Or use your Shipping Income account code, e.g., '4200'
+        //             TaxType: 'NONE' // Or 'OUTPUT' if shipping is taxable
+        //         });
+        //     }
+        // }
 
 
         const payload = {
