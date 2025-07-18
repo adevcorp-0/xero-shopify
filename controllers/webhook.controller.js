@@ -31,8 +31,6 @@ exports.getHome = (req, res) => {
 };
 
 exports.receiveWebhook = async (req, res) => {
-
-    return res.status(200).send('Received');;
     const topic = req.get('X-Shopify-Topic');
     const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
     const isVerified = verifyHmac(req.body, hmacHeader);

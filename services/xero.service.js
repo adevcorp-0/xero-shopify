@@ -184,7 +184,6 @@ async function archiveBillsForItem(itemCode) {
             console.error(`❌ Failed to void bill ${bill.invoiceId}:`, error.response?.data || error.message);
         }
     }
-
 }
 
 
