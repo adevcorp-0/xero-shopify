@@ -1,7 +1,7 @@
 const axios = require('axios');
 const striptags = require('striptags');
 const { SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN, SHOPIFY_APP_SERVER, XERO_TENANT_ID } = require('../config');
-const { getXeroItemBySKU, updateXeroInventory, createXeroItem, getXeroInvoiceByReference, createInvoice, updateInvoice, checkContact, getXeroItemQuantity, createInventoryBill, archiveBillsForItem } = require('./xero.service');
+const { getXeroItemBySKU, updateXeroInventory, createXeroItem, getXeroInvoiceByReference, createInvoice, updateInvoice, checkContact, getXeroItemQuantity, createInventoryBill, archiveBillsForItem, xeroRefundCreate, createXeroPayment } = require('./xero.service');
 const { saveItemBill, getBillsForItem, removeBill } = require('../services/xeroItemBill.service');
 
 const shopifyClient = require('../utils/shopifyClient');
@@ -190,17 +190,6 @@ exports.syncOrderToXero = async (orderPayload) => {
             return;
         }
 
-        // for (const item of line_items) {
-        //     if (item.inventory_item_id) {
-        //         await inventoryExpectationService.logExpectedInventoryChange({
-        //             inventoryItemId: item.inventory_item_id,
-        //             locationId: location_id, // or item.location_id if available
-        //             expectedQuantity: item.quantity,
-        //             reason: 'order paid'
-        //         });
-        //     }
-        // }
-
         const reference = name;
         const existingInvoice = await getXeroInvoiceByReference(reference);
         if (existingInvoice) {
@@ -209,10 +198,9 @@ exports.syncOrderToXero = async (orderPayload) => {
         }
 
         const today = new Date().toISOString().split('T')[0];
-        const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const dueDate = today; // Set due date same as date
         const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
         const lineItems = line_items.map(item => {
-            console.log("This is line item", item)
             const price = parseFloat(item.price || '0');
             const quantity = parseInt(item.quantity || 1);
             const totalDiscount = parseFloat(item.total_discount || '0');
@@ -220,32 +208,28 @@ exports.syncOrderToXero = async (orderPayload) => {
             const originalTotal = price * quantity;
             const netTotal = originalTotal - totalDiscount;
             const actualUnitPrice = parseFloat((netTotal / quantity).toFixed(2));
-            console.log(`[💸] SKU ${item.sku} | Qty: ${quantity} | Price: ${price} | Discount: ${totalDiscount} | Final Unit: ${actualUnitPrice}`);
-
-            const totalTax = item.tax_lines.reduce((sum, t) => sum + parseFloat(t.price), 0);
-            const taxPerUnit = (totalTax / item.quantity).toFixed(2);
 
             return {
                 Description: item.title,
                 Quantity: quantity,
                 UnitAmount: actualUnitPrice,
                 ItemCode: `${XERO_SKU_PREFIX}-${item.sku}`,
-                AccountCode: '4000', // Sales account}
+                AccountCode: '4000',
             }
         });
 
+        // Uncomment if you want shipping lines included
         // if (shipping_lines && shipping_lines.length > 0) {
         //     for (const shipping of shipping_lines) {
         //         lineItems.push({
         //             Description: shipping.title || 'Shipping',
         //             Quantity: 1,
         //             UnitAmount: parseFloat(shipping.price),
-        //             AccountCode: '6160', // Or use your Shipping Income account code, e.g., '4200'
-        //             TaxType: 'NONE' // Or 'OUTPUT' if shipping is taxable
+        //             AccountCode: '6160',
+        //             TaxType: 'NONE'
         //         });
         //     }
         // }
-
 
         const payload = {
             Type: 'ACCREC',
@@ -260,6 +244,15 @@ exports.syncOrderToXero = async (orderPayload) => {
         console.log('📦 Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
         const invoice = await createInvoice(payload);
         console.log(`🧾 Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
+
+        // Mark invoice as paid
+        if (invoice?.InvoiceID) {
+            const totalAmount = invoice.Total || invoice.AmountDue || 0;
+            if (totalAmount > 0) {
+                const payment = await createXeroPayment(invoice.InvoiceID, totalAmount);
+                console.log(`💸 Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
+            }
+        }
     } catch (error) {
         if (error.response?.data) {
             console.error("❌ Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
@@ -326,7 +319,14 @@ exports.syncOrderCancelled = async (payload) => {
 
 exports.syncRefundToXero = async (payload) => {
     try {
-        const orderName = payload.order_name;
+        const orderId = payload.order_id;
+        const orderName = await getShopifyOrderName(orderId);
+        if(orderName === null) 
+        {
+            console.log("Order doesn't exist");
+            return;
+        }
+        console.log("Refund order info: ", payload);
         const refund = payload;
         const invoice = await getXeroInvoiceByReference(orderName);
         if (!invoice) {
@@ -473,6 +473,19 @@ function extractIdFromGid(gid) {
     return gid.split('/').pop();
 }
 
+async function getShopifyOrderName(orderId) {
+    try {
+        const response = await axios.get(
+            `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/orders/${orderId}.json`,
+            { headers: SHOPIFY_HEADERS }
+        );
+        return response.data.order?.name || null;
+    } catch (error) {
+        console.error(`❌ Failed to fetch Shopify order name for orderId ${orderId}:`, error.message);
+        return null;
+    }
+}
+
 async function getAllShopifyVariants() {
     let since_id = null;
     let allVariants = [];
@@ -591,6 +604,7 @@ exports.bulkSyncVariantsToXero = async function () {
     }
 
 }
+
 
 async function createXeroBillForItem({ code, quantity, unitCost, description, reference }) {
     try {

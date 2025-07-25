@@ -5,12 +5,17 @@ const crypto = require('crypto');
 
 let inventoryLogs = [];
 
-const getWebhookHash = (payload) => {
+const getWebhookHash = (topic, payload) => {
+    if (topic.startsWith('orders/')) {
+        return crypto.createHash('md5').update(
+            `${payload.id || payload.order_id || payload.name}-${payload.created_at || payload.updated_at}`
+        ).digest('hex');
+    }
+    // Default for inventory
     return crypto.createHash('md5').update(
         `${payload.inventory_item_id}-${payload.updated_at}`
     ).digest('hex');
 };
-
 const processedEvents = new Set();
 exports.getHome = (req, res) => {
     let html = `<h1>🔗 Connect to Xero</h1>
@@ -38,7 +43,7 @@ exports.receiveWebhook = async (req, res) => {
     const payload = JSON.parse(req.body.toString('utf8'));
     console.log("topic: ", topic)
     // console.log("payload: ", payload)
-    const hash = getWebhookHash(payload);
+    const hash = getWebhookHash(topic, payload);
     if (processedEvents.has(hash)) {
         return res.status(200).send('⚠️ Duplicate webhook received, skipping...');
     }
@@ -63,6 +68,7 @@ exports.receiveWebhook = async (req, res) => {
             case 'orders/updated':
                 break;
             case 'refunds/create':
+                await shopifySyncService.syncRefundToXero(payload);
                 break;
             // case 'products/update':
             // case 'inventory_transfers/create':

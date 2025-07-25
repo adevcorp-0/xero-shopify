@@ -186,8 +186,6 @@ async function archiveBillsForItem(itemCode) {
     }
 }
 
-
-
 const getXeroInvoiceByReference = async (reference) => {
     const { accessToken, tenantId } = await getValidAccessToken();
     const whereClause = `Reference == "${reference}"`;
@@ -219,6 +217,33 @@ const createInvoice = async (invoicePayload) => {
 
     return response.data.Invoices?.[0];
 
+}
+
+async function createXeroPayment(invoiceId, amount) {
+    const { accessToken, tenantId } = await getValidAccessToken();
+    const payload = {
+        Payments: [
+            {
+                Invoice: { InvoiceID: invoiceId },
+                Account: { Code: "5011" }, // Replace with your Xero bank/cash account code
+                Date: new Date().toISOString().split('T')[0],
+                Amount: amount
+            }
+        ]
+    };
+    const response = await axios.post(
+        `${BASE_URL}/Payments`,
+        payload,
+        {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Xero-tenant-id': tenantId,
+                Accept: 'application/json',
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+    return response.data.Payments?.[0];
 }
 
 const updateInvoice = async (invoiceId) => {
@@ -293,5 +318,7 @@ module.exports = {
     xeroRefundCreate,
     getXeroItemQuantity,
     createInventoryBill,
-    archiveBillsForItem
+    archiveBillsForItem,
+    xeroRefundCreate,
+    createXeroPayment
 };

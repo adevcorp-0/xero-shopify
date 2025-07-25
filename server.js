@@ -12,10 +12,10 @@ const { getHome } = require('./controllers/webhook.controller');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// app.use('/webhook', bodyParser.raw({ type: 'application/json' }));
-// app.use('/webhook', webhookRoutes);
-// app.use('/xero', xeroRoutes);
-// app.get('/', getHome);
+app.use('/webhook', bodyParser.raw({ type: 'application/json' }));
+app.use('/webhook', webhookRoutes);
+app.use('/xero', xeroRoutes);
+app.get('/', getHome);
 
 const MongoURI = "mongodb://mongo:pFbSsotNzxPyKQEteWgvOSBQejYwmOxe@centerbeam.proxy.rlwy.net:43486/shopify_xero_sync?authSource=admin";
 console.log("Mongo url ========= : ", MongoURI);
