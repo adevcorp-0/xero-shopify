@@ -38,5 +38,4 @@ app.listen(PORT, async () => {
   // } catch (err) {
   //   console.error("❌ Failed to sync variants on startup:", err);
   // }
-
 });
