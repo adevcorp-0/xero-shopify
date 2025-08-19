@@ -10,22 +10,6 @@ let inventoryLogs = [];
 const processedEvents = new Map();
 const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 
-async function logWebhook(message, payload) {
-    const timestamp = new Date().toISOString();
-    let logMessage = `[${timestamp}] ${message}`;
-    if (payload) {
-        logMessage += ` | Payload: ${JSON.stringify(payload)}`;
-    }
-    logMessage += '\n';
-
-    try {
-        await fs.appendFile(LOG_FILE, logMessage);
-    } catch (err) {
-        console.error('❌ Failed to write log:', err);
-    }
-
-}
-
 const getWebhookHash = (topic, payload) => {
     if (topic.startsWith('orders/')) {
         return crypto.createHash('md5').update(
@@ -62,18 +46,18 @@ exports.receiveWebhook = async (req, res) => {
     try {
         const isVerified = verifyHmac(req.body, hmacHeader);
         if (!isVerified) {
-            await logWebhook('❌ Unauthorized webhook received', { topic });
+            // await logWebhook('❌ Unauthorized webhook received', { topic });
             return res.status(401).send('Unauthorized');
         }
         const payload = JSON.parse(req.body.toString('utf8'));
         const hash = getWebhookHash(topic, payload);
         const lastProcessed = processedEvents.get(hash);
         if (lastProcessed && Date.now() - lastProcessed < DUPLICATE_WINDOW_MS) {
-            await logWebhook('⚠️ Duplicate webhook skipped', { topic, hash });
+            console.log('⚠️ Duplicate webhook skipped', topic, payload);
             return res.status(200).send('Duplicate webhook skipped');
         }
         processedEvents.set(hash, Date.now());
-        await logWebhook(`📥 Received webhook: ${topic}`, payload);
+        // await logWebhook(`📥 Received webhook: ${topic}`, payload);
 
         // if (processedEvents.has(hash)) {
         //     let info = `⚠️ Duplicate webhook received,  Topic: ${topic}`;
@@ -99,9 +83,8 @@ exports.receiveWebhook = async (req, res) => {
             //     await shopifySyncService.syncOrderToXero(payload);
             //     break;
             case 'orders/paid':
-                await logOrdersPaid(payload, 'Received orders/paid webhook');
+                console.log("========= orders/paid event ==============")
                 await shopifySyncService.syncOrderToXero(payload);
-                await logOrdersPaid(payload, 'Finished processing orders/paid webhook');
                 break;
             case 'orders/cancelled':
                 await shopifySyncService.syncOrderCancelled(payload);
@@ -129,22 +112,4 @@ exports.receiveWebhook = async (req, res) => {
         res.status(500).send('Error');
     }
 };
-
-async function logOrdersPaid(payload, message = '') {
-    const logDir = path.join(__dirname, '../logs');
-    try {
-        await fs.mkdir(logDir, { recursive: true }); // creates if not exists
-        const logFile = path.join(logDir, 'orders_paid.log');
-        const logEntry = `
-            ==========================
-            Time: ${new Date().toISOString()}
-            Message: ${message}
-            Payload: ${JSON.stringify(payload, null, 2)}
-            ==========================
-            `;
-        await fs.appendFile(logFile, logEntry, 'utf8');
-    } catch (err) {
-        console.error('❌ Logging failed:', err);
-    }
-}
 
