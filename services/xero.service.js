@@ -2,6 +2,7 @@ const axios = require('axios');
 const { getValidAccessToken } = require('./xeroToken.service');
 const { saveItemBill, getBillsForItem, removeBill } = require('../services/xeroItemBill.service');
 const BASE_URL = "https://api.xero.com/api.xro/2.0"
+
 async function getXeroItemBySKU(code) {
     try {
         const { accessToken, tenantId } = await getValidAccessToken();
@@ -74,7 +75,7 @@ async function createXeroItem(itemData) {
         }
 
     }
-};
+}
 
 async function createABill() {
     const payload = {
@@ -130,8 +131,7 @@ async function getXeroItemQuantity(itemId) {
         }
     });
     return res.data?.Items?.[0]?.QuantityOnHand ?? 0;
-};
-
+}
 
 async function createInventoryBill({ sku, quantity, unitCost }) {
     const { accessToken, tenantId } = await getValidAccessToken();
@@ -159,7 +159,7 @@ async function createInventoryBill({ sku, quantity, unitCost }) {
             'Content-Type': 'application/json'
         }
     });
-};
+}
 
 async function archiveBillsForItem(itemCode) {
     const { accessToken, tenantId } = await getValidAccessToken();
@@ -201,7 +201,6 @@ const getXeroInvoiceByReference = async (reference) => {
 
     const invoices = response.data.Invoices || [];
     return invoices.length > 0 ? invoices[0] : null;
-
 }
 
 const createInvoice = async (invoicePayload) => {
@@ -282,7 +281,7 @@ const checkContact = async (contactId) => {
         // Contact not found or other error
         return false;
     }
-};
+}
 
 const xeroRefundCreate = async (creditNotePayload) => {
     try {
@@ -321,4 +320,4 @@ module.exports = {
     archiveBillsForItem,
     xeroRefundCreate,
     createXeroPayment
-};
+}

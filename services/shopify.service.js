@@ -24,6 +24,7 @@ exports.ensureWebhookRegistered = async () => {
         { topic: "orders/updated", path: "/webhook/inventory/orders" },
         { topic: "refunds/create", path: "/webhook/inventory/orders" },
     ];
+
     try {
         const existingRes = await axios.get(
             `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks.json`,
@@ -182,7 +183,7 @@ exports.syncInventoryFromShopify = async (payload) => {
 };
 
 exports.syncOrderToXero = async (orderPayload) => {
-    console.log("This is order function")
+    console.log(`💳 Starting Xero sync for Shopify order: ${orderPayload.name}`);
     try {
         const { id, line_items, customer, name, location_id, shipping_lines } = orderPayload;
         if (!line_items || line_items.length === 0) {
@@ -198,7 +199,7 @@ exports.syncOrderToXero = async (orderPayload) => {
         }
 
         const today = new Date().toISOString().split('T')[0];
-        const dueDate = today; // Set due date same as date
+        const dueDate = today;
         const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
         const lineItems = line_items.map(item => {
             const price = parseFloat(item.price || '0');
@@ -218,19 +219,17 @@ exports.syncOrderToXero = async (orderPayload) => {
             }
         });
 
-        // Uncomment if you want shipping lines included
-        // if (shipping_lines && shipping_lines.length > 0) {
-        //     for (const shipping of shipping_lines) {
-        //         lineItems.push({
-        //             Description: shipping.title || 'Shipping',
-        //             Quantity: 1,
-        //             UnitAmount: parseFloat(shipping.price),
-        //             AccountCode: '6160',
-        //             TaxType: 'NONE'
-        //         });
-        //     }
-        // }
-
+        if (shipping_lines && shipping_lines.length > 0) {
+            shipping_lines.forEach(shipping => {
+                lineItems.push({
+                    Description: shipping.title || 'Shipping',
+                    Quantity: shipping.quantity || 1,
+                    UnitAmount: parseFloat(shipping.price),
+                    AccountCode: '6160',
+                    TaxType: 'NONE'
+                });
+            });
+        }
         const payload = {
             Type: 'ACCREC',
             Contact: { Name: contactName },
@@ -245,7 +244,6 @@ exports.syncOrderToXero = async (orderPayload) => {
         const invoice = await createInvoice(payload);
         console.log(`🧾 Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
 
-        // Mark invoice as paid
         if (invoice?.InvoiceID) {
             const totalAmount = invoice.Total || invoice.AmountDue || 0;
             if (totalAmount > 0) {
@@ -321,8 +319,7 @@ exports.syncRefundToXero = async (payload) => {
     try {
         const orderId = payload.order_id;
         const orderName = await getShopifyOrderName(orderId);
-        if(orderName === null) 
-        {
+        if (orderName === null) {
             console.log("Order doesn't exist");
             return;
         }
