@@ -52,11 +52,13 @@ exports.receiveWebhook = async (req, res) => {
         const payload = JSON.parse(req.body.toString('utf8'));
         const hash = getWebhookHash(topic, payload);
         const lastProcessed = processedEvents.get(hash);
-        if (lastProcessed && Date.now() - lastProcessed < DUPLICATE_WINDOW_MS) {
-            console.log('⚠️ Duplicate webhook skipped', topic, payload);
-            return res.status(200).send('Duplicate webhook skipped');
-        }
-        processedEvents.set(hash, Date.now());
+        
+        // if (lastProcessed && Date.now() - lastProcessed < DUPLICATE_WINDOW_MS) {
+        //     console.log('⚠️ Duplicate webhook skipped', topic, payload);
+        //     return res.status(200).send('Duplicate webhook skipped');
+        // }
+        // processedEvents.set(hash, Date.now());
+        
         // await logWebhook(`📥 Received webhook: ${topic}`, payload);
 
         // if (processedEvents.has(hash)) {
@@ -82,20 +84,20 @@ exports.receiveWebhook = async (req, res) => {
             // case 'orders/create':
             //     await shopifySyncService.syncOrderToXero(payload);
             //     break;
-            case 'orders/paid':
-                console.log("========= orders/paid event ==============")
-                await shopifySyncService.syncOrderToXero(payload);
-                break;
-            case 'orders/cancelled':
-                await shopifySyncService.syncOrderCancelled(payload);
-                break;
-            // case 'orders/updated':
-            //     console.log("====== Orders Updated Case =======")
-            //     console.log(payload)
+            // case 'orders/paid':
+            //     console.log("========= orders/paid event ==============")
+            //     await shopifySyncService.syncOrderToXero(payload);
             //     break;
-            case 'refunds/create':
-                await shopifySyncService.syncRefundToXero(payload);
-                break;
+            // case 'orders/cancelled':
+            //     await shopifySyncService.syncOrderCancelled(payload);
+            //     break;
+            // // case 'orders/updated':
+            // //     console.log("====== Orders Updated Case =======")
+            // //     console.log(payload)
+            // //     break;
+            // case 'refunds/create':
+            //     await shopifySyncService.syncRefundToXero(payload);
+            //     break;
             // case 'products/update':
             // case 'inventory_transfers/create':
             //     // Optional: just log or store for auditing
