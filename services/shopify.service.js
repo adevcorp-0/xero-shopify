@@ -81,8 +81,6 @@ exports.clearAllWebhooks = async () => {
     }
 };
 
-
-
 exports.syncInventoryFromShopify = async (payload) => {
     try {
         const { inventory_item_id, location_id, available } = payload;
@@ -113,9 +111,6 @@ exports.syncInventoryFromShopify = async (payload) => {
         const description = product?.body_html || 'Imported from Shopify';
         const cleanDescription = striptags(description).slice(0, 4000);
         const salesPrice = parseFloat(variant.price) || 0;
-        // const purchaseCost = salesPrice * 0.5;
-
-        // const purchaseCost = await getVariantCostByGraphQL(productId) || 0;
         const costData = await getVariantCostByGraphQL(productId, inventory_item_id) || 0;
         const purchaseCost = parseFloat(costData) || 0;
 
