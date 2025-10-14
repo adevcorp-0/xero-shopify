@@ -28,8 +28,8 @@ mongoose.connect(MongoURI, {
 
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  // await syncAllOrders();
-  // setInterval(syncAllOrders, 120 * 60 * 1000);
+  await syncAllOrders();
+  setInterval(syncAllOrders, 120 * 60 * 1000);
   // await ensureWebhookRegistered();
   // voidInvoicesByContact("w.mkl.corp@gmail.com", "2025-06-01")
   //   .then(() => console.log("✅ Cleanup finished"))

@@ -37,7 +37,7 @@ exports.ensureWebhookRegistered = async () => {
                 (w) => w.address === address && w.topic === topic
             );
             if (alreadyExists) {
-                console.log(`✅ Webhook already registered: ${topic}`);
+                console.log(`Webhook already registered: ${topic}`);
                 continue;
             }
             const res = await axios.post(
@@ -51,10 +51,10 @@ exports.ensureWebhookRegistered = async () => {
                 },
                 { headers: SHOPIFY_HEADERS }
             );
-            console.log(`✅ Registered webhook for: ${topic}`, res.data?.webhook?.id || '');
+            console.log(`Registered webhook for: ${topic}`, res.data?.webhook?.id || '');
         }
     } catch (error) {
-        console.error("❌ Error registering webhooks:", error.response?.data || error.message);
+        console.error("Error registering webhooks:", error.response?.data || error.message);
     }
 };
 
@@ -72,12 +72,12 @@ exports.clearAllWebhooks = async () => {
                 `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-04/webhooks/${webhook.id}.json`,
                 { headers: SHOPIFY_HEADERS }
             );
-            console.log(`🗑️ Deleted webhook: ${webhook.topic} → ${webhook.address}`);
+            console.log(`Deleted webhook: ${webhook.topic} → ${webhook.address}`);
         }
 
-        console.log("✅ All webhooks deleted.");
+        console.log("All webhooks deleted.");
     } catch (error) {
-        console.error("❌ Error deleting webhooks:", error.response?.data || error.message);
+        console.error("Error deleting webhooks:", error.response?.data || error.message);
     }
 };
 
@@ -86,7 +86,7 @@ exports.syncInventoryFromShopify = async (payload) => {
         const { inventory_item_id, location_id, available } = payload;
         const variant = await getVariantByInventoryItemId(inventory_item_id);
         if (!variant || !variant.sku) {
-            console.warn('⚠️ SKU not found for inventory_item_id:', inventory_item_id);
+            console.warn('SKU not found for inventory_item_id:', inventory_item_id);
             return;
         }
 
@@ -97,7 +97,7 @@ exports.syncInventoryFromShopify = async (payload) => {
         });
         console.log(isExpected);
         if (isExpected.matched) {
-            console.log(`✅ Skipped expected inventory update for item ${inventory_item_id}`);
+            console.log(`Skipped expected inventory update for item ${inventory_item_id}`);
             return;
         }
 
@@ -129,7 +129,7 @@ exports.syncInventoryFromShopify = async (payload) => {
                     description: purchaseDescription,
                     reference: reference
                 });
-                console.log(`🧾 Created bill (********* Manual increase **************) for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
+                console.log(`Created bill for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
             }
             // else if (diff < 0) {
             //     await archiveBillsForItem(uniqueCode);
@@ -170,49 +170,42 @@ exports.syncInventoryFromShopify = async (payload) => {
             };
             console.log("product data : ", productData);
             const createdItem = await createXeroItem(productData);
-            console.log('🆕 Created Xero item:', createdItem?.Code || sku);
+            console.log('Created Xero item:', createdItem?.Code || sku);
         }
     } catch (error) {
-        console.error('❌ Error syncing inventory to Xero:', error.message || error);
+        console.error('Error syncing inventory to Xero:', error.message || error);
     }
 };
 
 exports.syncOrderToXero = async (orderPayload) => {
-    console.log(`💳 Starting Xero sync for Shopify order: ${orderPayload.name}`);
+    console.log(`Starting Xero sync for Shopify order: ${orderPayload.name}`);
     try {
         const { id, line_items, customer, name, location_id, shipping_lines } = orderPayload;
         if (!line_items || line_items.length === 0) {
-            console.warn('⚠️ No line items found in order:', id);
+            console.warn('No line items found in order:', id);
             return;
         }
 
         const reference = name;
         const existingInvoice = await getXeroInvoiceByReference(reference);
         if (existingInvoice) {
-            console.log(`⚠️ Invoice already exists in Xero for Shopify order ${reference}`);
+            console.log(`Invoice already exists in Xero for Shopify order ${reference}`);
             return;
         }
 
         const today = new Date().toISOString().split('T')[0];
         const dueDate = today;
         const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
-        const lineItems = line_items.map(item => {
-            const price = parseFloat(item.price || '0');
-            const quantity = parseInt(item.quantity || 1);
-            const totalDiscount = parseFloat(item.total_discount || '0');
-
-            const originalTotal = price * quantity;
-            const netTotal = originalTotal - totalDiscount;
-            const actualUnitPrice = parseFloat((netTotal / quantity).toFixed(2));
-
-            return {
-                Description: item.title,
-                Quantity: quantity,
-                UnitAmount: actualUnitPrice,
-                ItemCode: `${XERO_SKU_PREFIX}-${item.sku}`,
-                AccountCode: '4000',
-            }
-        });
+        
+        const orderTotal = parseFloat(orderPayload.current_total_price || orderPayload.total_price || 0);
+        console.log(`Order total from payload: ${orderTotal}`);
+        
+        const lineItems = [{
+            Description: `Shopify Order ${name} - ${line_items.length} items`,
+            Quantity: 1,
+            UnitAmount: orderTotal,
+            AccountCode: '4000',
+        }];
 
         if (shipping_lines && shipping_lines.length > 0) {
             shipping_lines.forEach(shipping => {
@@ -235,22 +228,24 @@ exports.syncOrderToXero = async (orderPayload) => {
             Status: 'AUTHORISED',
         };
 
-        console.log('📦 Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
+        console.log('Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
+        console.log(`Using order total as invoice total: ${orderTotal}`);
+        
         const invoice = await createInvoice(payload);
-        console.log(`🧾 Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
+        console.log(`Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
 
         if (invoice?.InvoiceID) {
             const totalAmount = invoice.Total || invoice.AmountDue || 0;
             if (totalAmount > 0) {
                 const payment = await createXeroPayment(invoice.InvoiceID, totalAmount);
-                console.log(`💸 Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
+                console.log(`Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
             }
         }
     } catch (error) {
         if (error.response?.data) {
-            console.error("❌ Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
+            console.error("Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
         } else {
-            console.error("❌ Unknown Error:", error.message);
+            console.error("Unknown Error:", error.message);
         }
     }
 }
@@ -259,7 +254,7 @@ exports.syncOrderUpdated = async (order) => {
     const reference = order.name;
     const existingInvoice = await getXeroInvoiceByReference(reference);
     if (existingInvoice) {
-        console.log(`⚠️ Invoice already exists in Xero for Shopify order ${reference}`);
+        console.log(`Invoice already exists in Xero for Shopify order ${reference}`);
         return;
     }
     const invoiceId = existingInvoice.InvoiceID;
@@ -298,15 +293,15 @@ exports.syncOrderUpdated = async (order) => {
 
 exports.syncOrderCancelled = async (payload) => {
     const orderName = payload.name;
-    console.log(`🗑️ Order cancelled: ${orderName}`);
+    console.log(`Order cancelled: ${orderName}`);
     const invoice = await getXeroInvoiceByReference(orderName);
     if (!invoice) {
-        console.warn(`❌ === Cancel Order === No invoice found: ${orderName}`);
+        console.warn(`No invoice found: ${orderName}`);
         return;
     }
     if (invoice.Status === 'AUTHORISED' || invoice.Status === 'PAID') {
         const updateRes = await updateInvoice(invoice.InvoiceID);
-        console.log(`🗑️ Voided invoice for canceled order: ${orderName}`);
+        console.log(`Voided invoice for canceled order: ${orderName}`);
     }
 }
 
@@ -322,7 +317,7 @@ exports.syncRefundToXero = async (payload) => {
         const refund = payload;
         const invoice = await getXeroInvoiceByReference(orderName);
         if (!invoice) {
-            console.warn(`❌ Invoice not found for refund: ${orderName}`);
+            console.warn(`Invoice not found for refund: ${orderName}`);
             return;
         }
         const lineItems = refund.refund_line_items.map(item => ({
@@ -348,10 +343,10 @@ exports.syncRefundToXero = async (payload) => {
             Status: 'AUTHORISED',
         };
         const result = await xeroRefundCreate(creditNotePayload);
-        console.log(`🧾 Created credit note for refund on order ${orderName}:`, result?.CreditNoteID);
+        console.log(`Created credit note for refund on order ${orderName}:`, result?.CreditNoteID);
         return result;
     } catch (error) {
-        console.error("❌ Error creating credit note:", error.response?.data || error.message);
+        console.error("Error creating credit note:", error.response?.data || error.message);
     }
 
 
@@ -370,35 +365,33 @@ exports.syncRefundToXero = async (payload) => {
 
 
 async function syncOrderToXero(orderPayload) {
-    console.log(`💳 Starting Xero sync for Shopify order: ${orderPayload.name}`);
+    console.log(`Starting Xero sync for Shopify order: ${orderPayload.name}`);
     try {
         const { id, line_items, customer, name, location_id, shipping_lines } = orderPayload;
         if (!line_items || line_items.length === 0) {
-            console.warn('⚠️ No line items found in order:', id);
+            console.warn('No line items found in order:', id);
             return;
         }
 
-        
+        console.log("Order id: ", orderPayload.id, ",total: ", orderPayload.current_total_price, ", sub_total: ", orderPayload.current_subtotal_price);
         const reference = name;
         const existingInvoice = await getXeroInvoiceByReference(reference);
         if (existingInvoice) {
-            console.log(`⚠️ Invoice already exists in Xero for Shopify order ${reference}`);
+            console.log(`Invoice already exists in Xero for Shopify order ${reference}`);
             return;
         }
 
-        // const today = new Date().toISOString().split('T')[0];
-        // const dueDate = today;
         const orderDate = orderPayload.processed_at || orderPayload.created_at;
         const dateObj = new Date(orderDate);
         const formattedDate = dateObj.toISOString().split('T')[0];
 
-        const invoiceDate = formattedDate;   // Xero Invoice Date
+        const invoiceDate = formattedDate;
         const dueDate = formattedDate;
 
 
         const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
         if (contactName.toLowerCase().includes('sasa milojevic')) {
-            console.log(`⚠️ Skipping order ${orderPayload.name} for contact ${contactName}`);
+            console.log(`Skipping order ${orderPayload.name} for contact ${contactName}`);
             return;
         }
         const lineItems = line_items.map(item => {
@@ -440,22 +433,22 @@ async function syncOrderToXero(orderPayload) {
             Status: 'AUTHORISED',
         };
 
-        console.log('📦 Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
-        const invoice = await createInvoice(payload);
-        console.log(`🧾 Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
+        console.log('Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
+        // const invoice = await createInvoice(payload);
+        // console.log(`Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
 
-        if (invoice?.InvoiceID) {
-            const totalAmount = invoice.Total || invoice.AmountDue || 0;
-            if (totalAmount > 0) {
-                const payment = await createXeroPayment(invoice.InvoiceID, totalAmount);
-                console.log(`💸 Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
-            }
-        }
+        // if (invoice?.InvoiceID) {
+        //     const totalAmount = invoice.Total || invoice.AmountDue || 0;
+        //     if (totalAmount > 0) {
+        //         const payment = await createXeroPayment(invoice.InvoiceID, totalAmount);
+        //         console.log(`Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
+        //     }
+        // }
     } catch (error) {
         if (error.response?.data) {
-            console.error("❌ Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
+            console.error("Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
         } else {
-            console.error("❌ Unknown Error:", error.message);
+            console.error("Unknown Error:", error.message);
         }
     }
 }
@@ -499,7 +492,7 @@ async function getProductById(productId) {
 
         return res.data.product || null;
     } catch (err) {
-        console.error(`❌ Failed to fetch product ${productId}:`, err.message);
+        console.error(`Failed to fetch product ${productId}:`, err.message);
         return null;
     }
 };
@@ -562,7 +555,7 @@ async function getShopifyOrderName(orderId) {
         );
         return response.data.order?.name || null;
     } catch (error) {
-        console.error(`❌ Failed to fetch Shopify order name for orderId ${orderId}:`, error.message);
+        console.error(`Failed to fetch Shopify order name for orderId ${orderId}:`, error.message);
         return null;
     }
 }
@@ -579,7 +572,7 @@ async function getAllShopifyVariants() {
         if (products.length === 0) break;
         const lastId = products[products.length - 1].id;
         if (seenProductIds.has(lastId)) {
-            console.warn("🛑 Detected potential infinite loop at product ID:", lastId);
+            console.warn("Detected potential infinite loop at product ID:", lastId);
             break;
         }
         for (const product of products) {
@@ -610,7 +603,7 @@ exports.bulkSyncVariantsToXero = async function () {
 
                 const sku = variant.sku;
                 if (!sku) {
-                    console.warn('⚠️ Missing SKU for variant:', variant.id);
+                    console.warn('Missing SKU for variant:', variant.id);
                     continue;
                 }
 
@@ -628,7 +621,7 @@ exports.bulkSyncVariantsToXero = async function () {
                 const purchaseDescription = `Imported: ${name}`;
 
                 if (xeroItem) {
-                    console.log(`✅ Already exists in Xero: ${uniqueCode}`);
+                    console.log(`Already exists in Xero: ${uniqueCode}`);
                     continue;
                 }
                 const productData = {
@@ -653,9 +646,9 @@ exports.bulkSyncVariantsToXero = async function () {
                     IsPurchased: true,
                 };
                 let reference = `ShopifyToXero_${uniqueCode}`
-                console.log('📦 Creating item in Xero:', uniqueCode);
+                console.log('Creating item in Xero:', uniqueCode);
                 const createdItem = await createXeroItem(productData);
-                console.log('🆕 Created:', createdItem?.Code);
+                console.log('Created:', createdItem?.Code);
                 if (available > 0) {
                     const bill = await createXeroBillForItem({
                         code: uniqueCode,
@@ -671,17 +664,17 @@ exports.bulkSyncVariantsToXero = async function () {
                             quantity: available,
                             reference: bill.Reference,
                         });
-                        console.log(`🧾 Created bill for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
+                        console.log(`Created bill for new item ${uniqueCode}: Bill ID ${bill.InvoiceID}`);
                     } else {
-                        console.warn(`⚠️ Bill missing or invalid for ${uniqueCode}, skipping saveItemBill`);
+                        console.warn(`Bill missing or invalid for ${uniqueCode}, skipping saveItemBill`);
                     }
                 }
             } catch (innerErr) {
-                console.error('❌ Error syncing variant:', variant?.id, innerErr?.response?.body || innerErr.message);
+                console.error('Error syncing variant:', variant?.id, innerErr?.response?.body || innerErr.message);
             }
         }
     } catch (err) {
-        console.error('❌ Failed to sync variants on startup:', err);
+        console.error('Failed to sync variants on startup:', err);
     }
 
 }
@@ -725,7 +718,7 @@ async function createXeroBillForItem({ code, quantity, unitCost, description, re
 
         return response.data.Invoices?.[0];
     } catch (error) {
-        console.error('❌ Error creating bill in Xero:', JSON.stringify(error.response.data, null, 2));
+        console.error('Error creating bill in Xero:', JSON.stringify(error.response.data, null, 2));
     }
 }
 
@@ -736,13 +729,13 @@ async function fetchShopifyOrders() {
         });
         return response.data.orders || [];
     } catch (err) {
-        console.error('❌ Failed to fetch Shopify orders:', err.message);
+        console.error('Failed to fetch Shopify orders:', err.message);
         return [];
     }
 }
 
 exports.syncAllOrders = async function () {
-    console.log(`⏱️ Starting Shopify → Xero sync at ${new Date().toLocaleString()}`);
+    console.log(`Starting Shopify to Xero sync at ${new Date().toLocaleString()}`);
     const orders = await fetchShopifyOrders();
     const paidOrders = orders.filter(order => order.financial_status === 'paid');
     console.log(`Fetched ${paidOrders.length} orders from Shopify.`);
@@ -750,5 +743,5 @@ exports.syncAllOrders = async function () {
     for (const order of paidOrders) {
         await syncOrderToXero(order);
     }
-    console.log(`🎉 Finished Shopify → Xero sync at ${new Date().toLocaleString()}\n`);
+    console.log(`Finished Shopify to Xero sync at ${new Date().toLocaleString()}\n`);
 }
