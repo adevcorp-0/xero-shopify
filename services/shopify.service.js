@@ -378,6 +378,7 @@ async function syncOrderToXero(orderPayload) {
             return;
         }
 
+        
         const reference = name;
         const existingInvoice = await getXeroInvoiceByReference(reference);
         if (existingInvoice) {
