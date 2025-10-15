@@ -177,78 +177,78 @@ exports.syncInventoryFromShopify = async (payload) => {
     }
 };
 
-exports.syncOrderToXero = async (orderPayload) => {
-    console.log(`Starting Xero sync for Shopify order: ${orderPayload.name}`);
-    try {
-        const { id, line_items, customer, name, location_id, shipping_lines } = orderPayload;
-        if (!line_items || line_items.length === 0) {
-            console.warn('No line items found in order:', id);
-            return;
-        }
+// exports.syncOrderToXero = async (orderPayload) => {
+//     console.log(`Starting Xero sync for Shopify order: ${orderPayload.name}`);
+//     try {
+//         const { id, line_items, customer, name, location_id, shipping_lines } = orderPayload;
+//         if (!line_items || line_items.length === 0) {
+//             console.warn('No line items found in order:', id);
+//             return;
+//         }
 
-        const reference = name;
-        const existingInvoice = await getXeroInvoiceByReference(reference);
-        if (existingInvoice) {
-            console.log(`Invoice already exists in Xero for Shopify order ${reference}`);
-            return;
-        }
+//         const reference = name;
+//         const existingInvoice = await getXeroInvoiceByReference(reference);
+//         if (existingInvoice) {
+//             console.log(`Invoice already exists in Xero for Shopify order ${reference}`);
+//             return;
+//         }
 
-        const today = new Date().toISOString().split('T')[0];
-        const dueDate = today;
-        const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
+//         const today = new Date().toISOString().split('T')[0];
+//         const dueDate = today;
+//         const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
         
-        const orderTotal = parseFloat(orderPayload.current_total_price || orderPayload.total_price || 0);
-        console.log(`Order total from payload: ${orderTotal}`);
+//         const orderTotal = parseFloat(orderPayload.current_total_price || orderPayload.total_price || 0);
+//         console.log(`Order total from payload: ${orderTotal}`);
         
-        const lineItems = [{
-            Description: `Shopify Order ${name} - ${line_items.length} items`,
-            Quantity: 1,
-            UnitAmount: orderTotal,
-            AccountCode: '4000',
-        }];
+//         const lineItems = [{
+//             Description: `Shopify Order ${name} - ${line_items.length} items`,
+//             Quantity: 1,
+//             UnitAmount: orderTotal,
+//             AccountCode: '4000',
+//         }];
 
-        if (shipping_lines && shipping_lines.length > 0) {
-            shipping_lines.forEach(shipping => {
-                lineItems.push({
-                    Description: shipping.title || 'Shipping',
-                    Quantity: shipping.quantity || 1,
-                    UnitAmount: parseFloat(shipping.price),
-                    AccountCode: '6160',
-                    TaxType: 'NONE'
-                });
-            });
-        }
-        const payload = {
-            Type: 'ACCREC',
-            Contact: { Name: contactName },
-            Date: today,
-            DueDate: dueDate,
-            LineItems: lineItems,
-            Reference: orderPayload.name,
-            Status: 'AUTHORISED',
-        };
+//         if (shipping_lines && shipping_lines.length > 0) {
+//             shipping_lines.forEach(shipping => {
+//                 lineItems.push({
+//                     Description: shipping.title || 'Shipping',
+//                     Quantity: shipping.quantity || 1,
+//                     UnitAmount: parseFloat(shipping.price),
+//                     AccountCode: '6160',
+//                     TaxType: 'NONE'
+//                 });
+//             });
+//         }
+//         const payload = {
+//             Type: 'ACCREC',
+//             Contact: { Name: contactName },
+//             Date: today,
+//             DueDate: dueDate,
+//             LineItems: lineItems,
+//             Reference: orderPayload.name,
+//             Status: 'AUTHORISED',
+//         };
 
-        console.log('Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
-        console.log(`Using order total as invoice total: ${orderTotal}`);
+//         console.log('Order payload being sent to Xero:', JSON.stringify(payload, null, 2));
+//         console.log(`Using order total as invoice total: ${orderTotal}`);
         
-        const invoice = await createInvoice(payload);
-        console.log(`Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
+//         const invoice = await createInvoice(payload);
+//         console.log(`Created Xero invoice for order ${id}:`, invoice?.InvoiceID);
 
-        if (invoice?.InvoiceID) {
-            const totalAmount = invoice.Total || invoice.AmountDue || 0;
-            if (totalAmount > 0) {
-                const payment = await createXeroPayment(invoice.InvoiceID, totalAmount);
-                console.log(`Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
-            }
-        }
-    } catch (error) {
-        if (error.response?.data) {
-            console.error("Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
-        } else {
-            console.error("Unknown Error:", error.message);
-        }
-    }
-}
+//         if (invoice?.InvoiceID) {
+//             const totalAmount = invoice.Total || invoice.AmountDue || 0;
+//             if (totalAmount > 0) {
+//                 const payment = await createXeroPayment(invoice.InvoiceID, totalAmount);
+//                 console.log(`Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
+//             }
+//         }
+//     } catch (error) {
+//         if (error.response?.data) {
+//             console.error("Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
+//         } else {
+//             console.error("Unknown Error:", error.message);
+//         }
+//     }
+// }
 
 exports.syncOrderUpdated = async (order) => {
     const reference = order.name;
@@ -452,6 +452,109 @@ async function syncOrderToXero(orderPayload) {
         }
     }
 }
+
+async function syncTestingOrderToXero (orderPayload){
+    try {
+        const { id, line_items, customer, name, shipping_lines, discount_codes } = orderPayload;
+        if (!line_items || line_items.length === 0) {
+            console.warn(`⚠️ No line items found in order: ${id}`);
+            return;
+        }
+
+        const reference = name;
+        const existingInvoice = await getXeroInvoiceByReference(reference);
+        if (existingInvoice) {
+            console.log(`ℹ️ Invoice already exists in Xero for order ${reference}`);
+            return;
+        }
+
+        const contactName = customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown Customer';
+        const today = new Date().toISOString().split('T')[0];
+        const lineItems = [];
+
+        for (const item of line_items) {
+            const basePrice = parseFloat(item.price || 0);
+            const quantity = parseFloat(item.quantity || 1);
+            const discountAmount = item.discount_allocations?.reduce((sum, d) => {
+                return sum + parseFloat(d.amount || 0);
+            }, 0) || 0;
+            const taxAmount = item.tax_lines?.reduce((sum, t) => {
+                return sum + parseFloat(t.price || 0);
+            }, 0) || 0;
+            const lineBaseTotal = basePrice * quantity;
+            const netLineTotal = lineBaseTotal - discountAmount + taxAmount;
+            const unitAmount = parseFloat((netLineTotal / quantity).toFixed(2));
+            const hasTax = taxAmount > 0;
+            const taxTitle = item.tax_lines?.map(t => t.title).join(', ') || 'No Tax';
+            const taxType = hasTax ? 'OUTPUT' : 'NONE';
+
+            lineItems.push({
+                Description: `${item.name}${hasTax ? ` (Tax: ${taxTitle})` : ''}`,
+                Quantity: quantity,
+                UnitAmount: unitAmount,
+                AccountCode: '4000',
+                TaxType: taxType
+            });
+        }
+        if (shipping_lines && shipping_lines.length > 0) {
+            shipping_lines.forEach(shipping => {
+                const shippingTax = shipping.tax_lines?.reduce((sum, t) => sum + parseFloat(t.price || 0), 0) || 0;
+                const shippingTaxTitle = shipping.tax_lines?.map(t => t.title).join(', ') || 'No Tax';
+                const hasTax = shippingTax > 0;
+                const taxType = hasTax ? 'OUTPUT' : 'NONE';
+
+                lineItems.push({
+                    Description: `${shipping.title || 'Shipping'}${hasTax ? ` (Tax: ${shippingTaxTitle})` : ''}`,
+                    Quantity: 1,
+                    UnitAmount: parseFloat((parseFloat(shipping.price || 0) + shippingTax).toFixed(2)),
+                    AccountCode: '6160',
+                    TaxType: taxType
+                });
+            });
+        }
+        let discountNote = '';
+        if (discount_codes && discount_codes.length > 0) {
+            const codeStrings = discount_codes.map(d => `${d.code} (${d.amount}${d.type === 'percentage' ? '%' : ''})`);
+            discountNote = `Discount applied: ${codeStrings.join(', ')}`;
+        }
+        const payload = {
+            Type: 'ACCREC',
+            Contact: { Name: contactName },
+            Date: today,
+            DueDate: today,
+            LineItems: lineItems,
+            Reference: orderPayload.name,
+            Status: 'AUTHORISED',
+        };
+
+        if (discountNote) {
+            payload.LineItems.push({
+                Description: discountNote,
+                Quantity: 0,
+                UnitAmount: 0,
+                AccountCode: '4000',
+                TaxType: 'NONE'
+            });
+        }
+
+        console.log(payload.LineItems);
+        const invoice = await createInvoice(payload);
+        if (invoice?.InvoiceID) {
+            const totalAmount = invoice.Total || invoice.AmountDue || 0;
+            if (totalAmount > 0) {
+                const payment = await createXeroPayment(invoice.InvoiceID, totalAmount);
+                console.log(`💸 Marked invoice as paid in Xero: Payment ID ${payment?.PaymentID}`);
+            }
+        }
+
+    } catch (error) {
+        if (error.response?.data) {
+            console.error("❌ Xero Detailed Error:", JSON.stringify(error.response.data, null, 2));
+        } else {
+            console.error("❌ Unknown Error:", error.message);
+        }
+    }
+};
 
 async function getVariantByInventoryItemId(inventoryItemId) {
     const query = `
@@ -738,10 +841,14 @@ exports.syncAllOrders = async function () {
     console.log(`Starting Shopify to Xero sync at ${new Date().toLocaleString()}`);
     const orders = await fetchShopifyOrders();
     const paidOrders = orders.filter(order => order.financial_status === 'paid');
-    console.log(`Fetched ${paidOrders.length} orders from Shopify.`);
+    // const testOrder = orders.filter(order => order.name === '#24944');
+    // if(testOrder.length > 0) {
+    //     await syncTestingOrderToXero(testOrder[0]);
+    // }
+    // console.log(`Fetched ${paidOrders.length} orders from Shopify.`);
 
     for (const order of paidOrders) {
-        await syncOrderToXero(order);
+        await syncTestingOrderToXero(order);
     }
     console.log(`Finished Shopify to Xero sync at ${new Date().toLocaleString()}\n`);
 }
